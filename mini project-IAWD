@@ -1,0 +1,330 @@
+<?php
+$servername = "localhost";
+$username = "root"; // Change this
+$password = ""; // Change this
+$dbname = "ecommerce";
+
+// Create connection
+$conn = new mysqli($servername, $username, $password, $dbname);
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+session_start();
+
+// Handle signup
+if (isset($_POST['signup'])) {
+    $full_name = $_POST['full_name'];
+    $username = $_POST['username'];
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    
+    // Prepared statement to check if username exists
+    $stmt = $conn->prepare("SELECT * FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if ($result->num_rows > 0) {
+        echo "<script>alert('Username already exists. Please choose another one.');</script>";
+    } else {
+        // Prepared statement to insert new user
+        $stmt = $conn->prepare("INSERT INTO users (full_name, username, password) VALUES (?, ?, ?)");
+        $stmt->bind_param("sss", $full_name, $username, $password);
+        $stmt->execute();
+        header("Location: ?page=login");
+        exit();
+    }
+    $stmt->close();
+}
+
+// Handle login
+if (isset($_POST['login'])) {
+    $username = $_POST['username'];
+    $password = $_POST['password'];
+
+    // Prepared statement to retrieve user
+    $stmt = $conn->prepare("SELECT * FROM users WHERE username = ?");
+    $stmt->bind_param("s", $username);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    $user = $result->fetch_assoc();
+
+    if ($user && password_verify($password, $user['password'])) {
+        $_SESSION['user_id'] = $user['id'];
+        $_SESSION['full_name'] = $user['full_name'];
+        header("Location: ?page=products");
+        exit();
+    } else {
+        echo "<script>alert('Invalid username or password.');</script>";
+    }
+    $stmt->close();
+}
+
+// Handle adding to cart and redirect to checkout
+if (isset($_POST['checkout'])) {
+    if (isset($_SESSION['user_id'])) {
+        $product_id = $_POST['product_id'];
+        $user_id = $_SESSION['user_id'];
+
+        // Prepared statement to insert order
+        $stmt = $conn->prepare("INSERT INTO orders (user_id, product_id) VALUES (?, ?)");
+        $stmt->bind_param("ii", $user_id, $product_id);
+        $stmt->execute();
+        $stmt->close();
+
+        header("Location: ?page=checkout");
+        exit();
+    } else {
+        header("Location: ?page=login");
+        exit();
+    }
+}
+
+// Handle checkout form submission
+if (isset($_POST['confirm_checkout'])) {
+    if (isset($_SESSION['user_id'])) {
+        $name = $_POST['name'];
+        $email = $_POST['email'];
+        $payment_method = $_POST['payment_method'];
+        $card_name = $_POST['card_name'];
+        $card_number = $_POST['card_number'];
+        $expiry_date = $_POST['expiry_date'];
+
+        // Here you would normally save the checkout details in the database
+        echo "<script>alert('Checkout complete!');</script>";
+
+        // Redirect or perform further actions after successful checkout
+    } else {
+        header("Location: ?page=login");
+        exit();
+    }
+}
+
+// Fetch products (for demonstration, we're using static products with images)
+$products = [
+    ['id' => 1, 'name' => 'Running Shoes', 'description' => 'High-performance running shoes.', 'price' => 79.99, 'image' => 'https://via.placeholder.com/150?text=Shoes'],
+    ['id' => 2, 'name' => 'Baseball Bat', 'description' => 'Lightweight aluminum baseball bat.', 'price' => 39.99, 'image' => 'https://via.placeholder.com/150?text=Bat'],
+    ['id' => 3, 'name' => 'Volleyball', 'description' => 'Professional-grade volleyball.', 'price' => 29.99, 'image' => 'https://via.placeholder.com/150?text=Volleyball'],
+    // Add more products here
+];
+
+// Determine which page to show
+$page = isset($_GET['page']) ? $_GET['page'] : 'signup';
+
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Commerce</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+        nav {
+            background-color: #4CAF50;
+            padding: 10px;
+            text-align: center;
+        }
+        nav a {
+            color: #fff;
+            margin: 0 15px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        nav a:hover {
+            text-decoration: underline;
+        }
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-image: linear-gradient(to right, #ff7e5f, #feb47b);
+        }
+        .form-container {
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.5);
+            width: 400px;
+            text-align: center;
+        }
+        .form-container input,
+        .form-container button {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .form-container button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+        }
+        .products-container {
+            padding: 20px;
+            color: white;
+        }
+        .products-container ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .products-container li {
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+        }
+        .products-container li img {
+            width: 50px;
+            height: 50px;
+            margin-right: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<nav>
+    <a href="?page=signup">Signup</a>
+    <a href="?page=login">Login</a>
+    <a href="?page=products">Products</a>
+    <a href="?page=checkout">Checkout</a>
+</nav>
+
+<?php if ($page == 'signup'): ?>
+    <div class="container">
+        <div class="form-container">
+            <h2>Signup</h2>
+            <form method="post">
+                <input type="text" name="full_name" placeholder="Full Name" required>
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit" name="signup">Signup</button>
+            </form>
+            <p>Already have an account? <a href="?page=login">Log in</a></p>
+        </div>
+    </div>
+<?php elseif ($page == 'login'): ?>
+    <div class="container">
+        <div class="form-container">
+            <h2>Login</h2>
+            <form method="post">
+                <input type="text" name="username" placeholder="Username" required>
+                <input type="password" name="password" placeholder="Password" required>
+                <button type="submit" name="login">Login</button>
+            </form>
+            <p>Don't have an account? <a href="?page=signup">Sign up</a></p>
+        </div>
+    </div>
+<?php elseif ($page == 'products'): ?>
+    <div class="products-container">
+        <h2>Products</h2>
+        <ul>
+            <?php foreach ($products as $product): ?>
+                <li>
+                    <img src="<?php echo $product['image']; ?>" alt="<?php echo $product['name']; ?>">
+                    <div>
+                        <h3><?php echo $product['name']; ?></h3>
+                        <p><?php echo $product['description']; ?></p>
+                        <p>Price: $<?php echo number_format($product['price'], 2); ?></p>
+                        <form method="post">
+                            <input type="hidden" name="product_id" value="<?php echo $product['id']; ?>">
+                            <button type="submit" name="checkout">Add to Cart</button>
+                        </form>
+                    </div>
+                </li>
+            <?php endforeach; ?>
+        </ul>
+    </div>
+<?php elseif ($page == 'checkout'): ?>
+    <div class="container">
+        <div class="form-container">
+            <h2>Checkout</h2>
+            <form method="post">
+                <input type="text" name="name" placeholder="Full Name" required>
+                <input type="email" name="email" placeholder="Email" required>
+                <select name="payment_method" required>
+                    <option value="credit_card">Credit Card</option>
+                    <option value="paypal">PayPal</option>
+                </select>
+                <input type="text" name="card_name" placeholder="Name on Card" required>
+                <input type="text" name="card_number" placeholder="Card Number" required>
+                <input type="text" name="expiry_date" placeholder="Expiry Date (MM/YY)" required>
+                <button type="submit" name="confirm_checkout">Confirm Checkout</button>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+database connection
+
+-- Create the 'ecommerce' database
+CREATE DATABASE IF NOT EXISTS ecommerce;
+USE ecommerce;
+
+-- Create the 'users' table to store user information
+CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    full_name VARCHAR(255) NOT NULL,
+    username VARCHAR(255) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Create the 'products' table to store product details
+CREATE TABLE IF NOT EXISTS products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    image_url VARCHAR(255) NOT NULL
+);
+
+-- Insert sample product data into the 'products' table
+INSERT INTO products (name, description, price, image_url) VALUES
+('Running Shoes', 'High-performance running shoes.', 79.99, 'https://via.placeholder.com/150?text=Shoes'),
+('Baseball Bat', 'Lightweight aluminum baseball bat.', 39.99, 'https://via.placeholder.com/150?text=Bat'),
+('Volleyball', 'Professional-grade volleyball.', 29.99, 'https://via.placeholder.com/150?text=Volleyball'),
+('Tennis Racket', 'Durable and lightweight racket.', 59.99, 'https://via.placeholder.com/150?text=Racket'),
+('Basketball', 'Official size basketball.', 49.99, 'https://via.placeholder.com/150?text=Basketball'),
+('Hiking Boots', 'Comfortable hiking boots for outdoor adventures.', 89.99, 'https://via.placeholder.com/150?text=Hiking+Boots'),
+('Soccer Ball', 'Top quality soccer ball.', 34.99, 'https://via.placeholder.com/150?text=Soccer+Ball'),
+('Cycling Helmet', 'Safety first with this comfortable helmet.', 44.99, 'https://via.placeholder.com/150?text=Helmet'),
+('Gym Bag', 'Spacious gym bag with multiple pockets.', 24.99, 'https://via.placeholder.com/150?text=Gym+Bag');
+
+-- Create the 'orders' table to store user orders
+CREATE TABLE IF NOT EXISTS orders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    product_id INT NOT NULL,
+    order_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+);
+
+
